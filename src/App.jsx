@@ -26,6 +26,8 @@ const loginRequest = {
 const ALLOWED_EMAILS = [
   'mchomali@maritex.cl',
   'mchomal@grupomaritex.cl',
+  'matiaschomali@maritex.cl',
+  'matiaschomali@grupomaritex.cl',
   'aespinoza@maritex.cl',
   'aespinoza@grupomaritex.cl',
   'fosorio@maritex.cl',
