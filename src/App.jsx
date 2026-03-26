@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useIsAuthenticated, useMsal } from '@azure/msal-react';
 import {
   Loader2,
@@ -49,6 +49,8 @@ const METAS_MENSUALES = {
   noviembre: { venta: 1800000000, margen: 600591000, rentabilidad: 33.40 },
   diciembre: { venta: 1332000000, margen: 444641000, rentabilidad: 33.40 },
 };
+
+const AUTO_CSV_URL = './data/ventas.csv';
 
 const App = () => {
   const { instance, accounts } = useMsal();
@@ -128,6 +130,79 @@ const App = () => {
   const formatMoney = (val) => Math.round(val).toLocaleString('es-CL');
   const formatPct = (val) => `${(val || 0).toFixed(1)}%`;
 
+  const parseCsvText = (text) => {
+    const lines = text.split(/\r?\n/).filter((l) => l.trim() !== '');
+    if (lines.length < 2) {
+      throw new Error('CSV sin datos.');
+    }
+    const separator = lines[0].includes(';') ? ';' : ',';
+    const processed = lines.slice(1).map((line) => {
+      const values = line.split(separator).map((v) => v.trim().replace(/"/g, ''));
+      const parseContable = (v) => {
+        if (!v) return 0;
+        let clean = v.replace(/\s/g, '');
+        clean = clean.includes('.') && clean.includes(',')
+          ? clean.replace(/\./g, '').replace(',', '.')
+          : clean.replace(',', '.');
+        return parseFloat(clean) || 0;
+      };
+
+      const periodoStr = values[0]?.split('.')[0] || '';
+      const rawMarca = (values[111] || '').toUpperCase();
+      let marcaFinal = 'OTRO';
+      if (['MARITEX', 'MTX', 'VICSA'].some((m) => rawMarca.includes(m))) marcaFinal = 'MARITEX';
+      else if (['NOLK', 'NO'].some((m) => rawMarca === m || rawMarca.startsWith('NOLK'))) marcaFinal = 'NOLK';
+
+      return {
+        ano: periodoStr.substring(0, 4),
+        mes: MESES_NOMBRES[parseInt(periodoStr.substring(4, 6), 10) - 1] || '',
+        numMes: parseInt(periodoStr.substring(4, 6), 10),
+        cliente: values[26] || 'Sin Cliente',
+        vendedor: values[27] || 'Sin Vendedor',
+        producto: values[8] || 'Sin Producto',
+        neto: parseContable(values[32]),
+        costo: parseContable(values[34]),
+        marca: marcaFinal,
+      };
+    }).filter((r) => r.ano && (r.neto !== 0 || r.costo !== 0));
+
+    if (processed.length === 0) {
+      throw new Error('CSV sin filas validas.');
+    }
+    return processed;
+  };
+
+  const applyParsedData = (processed) => {
+    setSalesData(processed);
+    const anos = [...new Set(processed.map((d) => d.ano))].sort().reverse();
+    setSelectedAno(anos[0] || '');
+    setSelectedMes(processed[0]?.mes || 'marzo');
+  };
+
+  useEffect(() => {
+    if (!user || salesData.length > 0) return;
+
+    const loadAutomaticCsv = async () => {
+      setIsProcessing(true);
+      try {
+        const response = await fetch(`${AUTO_CSV_URL}?t=${Date.now()}`, { cache: 'no-store' });
+        if (!response.ok) {
+          throw new Error('No se encontro CSV automatico.');
+        }
+        const text = await response.text();
+        const processed = parseCsvText(text);
+        applyParsedData(processed);
+        setError(null);
+      } catch {
+        // Si no existe archivo automatico, se mantiene carga manual.
+      } finally {
+        setIsProcessing(false);
+      }
+    };
+
+    loadAutomaticCsv();
+  }, [user, salesData.length]);
+
   const handleFileUpload = (event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -137,42 +212,8 @@ const App = () => {
     reader.onload = (e) => {
       try {
         const text = e.target.result;
-        const lines = text.split(/\r?\n/).filter((l) => l.trim() !== '');
-        const separator = lines[0].includes(';') ? ';' : ',';
-        const processed = lines.slice(1).map((line) => {
-          const values = line.split(separator).map((v) => v.trim().replace(/"/g, ''));
-          const parseContable = (v) => {
-            if (!v) return 0;
-            let clean = v.replace(/\s/g, '');
-            clean = clean.includes('.') && clean.includes(',')
-              ? clean.replace(/\./g, '').replace(',', '.')
-              : clean.replace(',', '.');
-            return parseFloat(clean) || 0;
-          };
-
-          const periodoStr = values[0]?.split('.')[0] || '';
-          const rawMarca = (values[111] || '').toUpperCase();
-          let marcaFinal = 'OTRO';
-          if (['MARITEX', 'MTX', 'VICSA'].some((m) => rawMarca.includes(m))) marcaFinal = 'MARITEX';
-          else if (['NOLK', 'NO'].some((m) => rawMarca === m || rawMarca.startsWith('NOLK'))) marcaFinal = 'NOLK';
-
-          return {
-            ano: periodoStr.substring(0, 4),
-            mes: MESES_NOMBRES[parseInt(periodoStr.substring(4, 6), 10) - 1] || '',
-            numMes: parseInt(periodoStr.substring(4, 6), 10),
-            cliente: values[26] || 'Sin Cliente',
-            vendedor: values[27] || 'Sin Vendedor',
-            producto: values[8] || 'Sin Producto',
-            neto: parseContable(values[32]),
-            costo: parseContable(values[34]),
-            marca: marcaFinal,
-          };
-        }).filter((r) => r.ano && (r.neto !== 0 || r.costo !== 0));
-
-        setSalesData(processed);
-        const anos = [...new Set(processed.map((d) => d.ano))].sort().reverse();
-        setSelectedAno(anos[0] || '');
-        setSelectedMes(processed[0]?.mes || 'marzo');
+        const processed = parseCsvText(text);
+        applyParsedData(processed);
       } catch (err) {
         setError('Error al procesar el reporte.');
       } finally {
