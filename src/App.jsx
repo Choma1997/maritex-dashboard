@@ -20,6 +20,7 @@ const ALLOWED_EMAILS = [
   'gerencia@maritex.cl',
   'finanzas@maritex.cl',
   'comercial@maritex.cl',
+  'matiaschomali@grupomaritex.cl',
 ];
 
 const MESES_NOMBRES = [
