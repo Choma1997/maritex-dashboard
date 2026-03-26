@@ -10,6 +10,8 @@
     "deploy": "npm run build && gh-pages -d dist"
   },
   "dependencies": {
+    "@azure/msal-browser": "^4.26.0",
+    "@azure/msal-react": "^3.0.26",
     "lucide-react": "^0.542.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

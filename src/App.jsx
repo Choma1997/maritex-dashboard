@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { useMsal, useIsAuthenticated } from '@azure/msal-react';
 import {
   Loader2,
   Upload,
@@ -11,22 +12,8 @@ import {
   Target,
 } from 'lucide-react';
 
-/**
- * CONFIGURACION DE AZURE AD (MICROSOFT ENTRA ID)
- * 1. Ve al portal de Azure -> App Registrations.
- * 2. Copia el Application (client) ID y Directory (tenant) ID.
- * 3. En Authentication, anade plataforma SPA y URL de GitHub Pages.
- */
-const msalConfig = {
-  auth: {
-    clientId: '363fd41d-fb01-40f5-9cb8-8162bdabf596',
-    authority: 'https://login.microsoftonline.com/70db351d-e90a-41dc-9eea-1a72589d1d95',
-    redirectUri: window.location.origin,
-  },
-  cache: {
-    cacheLocation: 'sessionStorage',
-    storeAuthStateInCookie: false,
-  },
+const loginRequest = {
+  scopes: ['openid', 'profile', 'email', 'User.Read'],
 };
 
 const ALLOWED_EMAILS = [
@@ -56,6 +43,8 @@ const METAS_MENSUALES = {
 };
 
 const App = () => {
+  const { instance, accounts } = useMsal();
+  const isAuthenticated = useIsAuthenticated();
   const [user, setUser] = useState(null);
   const [authError, setAuthError] = useState(null);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
@@ -65,36 +54,48 @@ const App = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState(null);
 
-  // Placeholder para evitar warning de variable no usada.
-  if (!msalConfig.auth.clientId) {
-    // no-op
-  }
+  useEffect(() => {
+    if (!isAuthenticated || accounts.length === 0) {
+      setUser(null);
+      return;
+    }
+
+    const activeAccount = accounts[0];
+    const mail = (activeAccount.username || '').toLowerCase().trim();
+
+    if (ALLOWED_EMAILS.includes(mail)) {
+      setUser({
+        email: mail,
+        name: activeAccount.name || mail,
+      });
+      setAuthError(null);
+      return;
+    }
+
+    setUser(null);
+    setAuthError('Acceso Denegado: Su cuenta no esta autorizada para ver este dashboard.');
+    instance.logoutPopup().catch(() => {
+      // no-op
+    });
+  }, [accounts, instance, isAuthenticated]);
 
   const handleLogin = async () => {
     setIsAuthenticating(true);
     setAuthError(null);
 
     try {
-      setTimeout(() => {
-        const inputEmail = window.prompt('Ingrese su correo corporativo de Microsoft:');
-        const lowerEmail = inputEmail?.toLowerCase().trim();
-
-        if (ALLOWED_EMAILS.includes(lowerEmail)) {
-          setUser({ email: lowerEmail, name: 'Usuario Maritex' });
-        } else {
-          setAuthError('Acceso Denegado: Su cuenta no esta autorizada para ver este dashboard.');
-        }
-        setIsAuthenticating(false);
-      }, 800);
+      await instance.loginPopup(loginRequest);
     } catch (e) {
       setAuthError('Error de conexion con Microsoft Entra ID.');
+    } finally {
       setIsAuthenticating(false);
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setUser(null);
     setSalesData([]);
+    await instance.logoutPopup();
   };
 
   const formatMoney = (val) => Math.round(val).toLocaleString('es-CL');
