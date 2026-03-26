@@ -24,10 +24,16 @@ const loginRequest = {
 };
 
 const ALLOWED_EMAILS = [
-  'gerencia@maritex.cl',
-  'finanzas@maritex.cl',
-  'comercial@maritex.cl',
-  'matiaschomali@grupomaritex.cl',
+  'mchomali@maritex.cl',
+  'mchomal@grupomaritex.cl',
+  'aespinoza@maritex.cl',
+  'aespinoza@grupomaritex.cl',
+  'fosorio@maritex.cl',
+  'fosorio@grupomaritex.cl',
+  'mgutmann@maritex.cl',
+  'mgutmann@grupomaritex.cl',
+  'rarrue@maritex.cl',
+  'rarrue@grupomaritex.cl',
 ];
 
 const MESES_NOMBRES = [
