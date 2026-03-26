@@ -130,6 +130,11 @@ function Push-IfChanged {
 
   Push-Location $RepoPath
   try {
+    git pull --rebase --autostash origin main
+    if ($LASTEXITCODE -ne 0) {
+      throw "No se pudo sincronizar con origin/main."
+    }
+
     $statusOutput = git status --porcelain
     if (-not $statusOutput) {
       Write-Host "[SYNC] No hay cambios para subir."
@@ -141,11 +146,6 @@ function Push-IfChanged {
     if (-not $postAddStatus) {
       Write-Host "[SYNC] No hay cambios en archivos de datos."
       return
-    }
-
-    git pull --rebase origin main
-    if ($LASTEXITCODE -ne 0) {
-      throw "No se pudo sincronizar con origin/main antes de commit."
     }
 
     git -c user.name="Matias Chomali" -c user.email="matiaschomali@users.noreply.github.com" commit -m "Auto-update dashboard data"
