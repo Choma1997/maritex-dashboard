@@ -47,6 +47,7 @@ const App = () => {
   const isAuthenticated = useIsAuthenticated();
   const [user, setUser] = useState(null);
   const [authError, setAuthError] = useState(null);
+  const [detectedEmail, setDetectedEmail] = useState('');
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [salesData, setSalesData] = useState([]);
   const [selectedAno, setSelectedAno] = useState('');
@@ -61,12 +62,25 @@ const App = () => {
     }
 
     const activeAccount = accounts[0];
-    const mail = (activeAccount.username || '').toLowerCase().trim();
+    const claims = activeAccount.idTokenClaims || {};
+    const candidateEmails = [
+      activeAccount.username,
+      claims.email,
+      claims.preferred_username,
+      ...(Array.isArray(claims.emails) ? claims.emails : []),
+      claims.upn,
+    ]
+      .filter(Boolean)
+      .map((value) => String(value).toLowerCase().trim());
+    const uniqueCandidates = [...new Set(candidateEmails)];
+    const allowedEmail = uniqueCandidates.find((email) => ALLOWED_EMAILS.includes(email));
+    const primaryEmail = uniqueCandidates[0] || '';
+    setDetectedEmail(primaryEmail);
 
-    if (ALLOWED_EMAILS.includes(mail)) {
+    if (allowedEmail) {
       setUser({
-        email: mail,
-        name: activeAccount.name || mail,
+        email: allowedEmail,
+        name: activeAccount.name || allowedEmail,
       });
       setAuthError(null);
       return;
@@ -180,7 +194,10 @@ const App = () => {
           {authError && (
             <div className="mb-8 p-4 bg-red-50 border border-red-100 rounded-2xl flex items-start gap-3 text-red-600 text-xs font-bold text-left">
               <AlertCircle size={18} className="shrink-0" />
-              <span>{authError}</span>
+              <span>
+                {authError}
+                {detectedEmail ? ` Correo detectado: ${detectedEmail}` : ''}
+              </span>
             </div>
           )}
 
