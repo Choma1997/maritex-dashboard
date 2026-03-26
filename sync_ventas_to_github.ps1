@@ -85,6 +85,10 @@ function Update-TargetCsv {
   }
 
   if ($SourceFile.Extension -eq ".csv") {
+    if ([System.IO.Path]::GetFullPath($SourceFile.FullName) -eq [System.IO.Path]::GetFullPath($TargetCsvFullPath)) {
+      Write-Host "[SYNC] El archivo origen ya es ventas.csv en destino."
+      return
+    }
     Copy-Item -Path $SourceFile.FullName -Destination $TargetCsvFullPath -Force
     return
   }
