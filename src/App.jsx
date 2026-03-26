@@ -57,6 +57,7 @@ const METAS_MENSUALES = {
 };
 
 const AUTO_CSV_URL = './data/ventas.csv';
+const SELLER_EQ_URL = './data/vendedores_equivalencia.csv';
 
 const App = () => {
   const { instance, accounts } = useMsal();
@@ -68,6 +69,7 @@ const App = () => {
   const [isAuthenticating, setIsAuthenticating] = useState(false);
 
   const [salesData, setSalesData] = useState([]);
+  const [sellerLookup, setSellerLookup] = useState({});
   const [selectedAno, setSelectedAno] = useState('');
   const [selectedMes, setSelectedMes] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -136,6 +138,69 @@ const App = () => {
   const formatMoney = (val) => Math.round(val).toLocaleString('es-CL');
   const formatPct = (val) => `${(val || 0).toFixed(1)}%`;
 
+  const normalizeSellerCode = (value) => {
+    const raw = String(value ?? '').trim();
+    if (!raw) return '';
+    if (/^\d+$/.test(raw)) return String(parseInt(raw, 10));
+    return raw.toLowerCase();
+  };
+
+  const resolveSellerName = (rawSellerCode, lookup) => {
+    const raw = String(rawSellerCode ?? '').trim();
+    if (!raw) return 'Sin Vendedor';
+    const normalized = normalizeSellerCode(raw);
+    return lookup[normalized] || lookup[raw.toLowerCase()] || raw;
+  };
+
+  const parseSellerEquivalences = (text) => {
+    const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    const map = {};
+    lines.forEach((line) => {
+      if (line.startsWith(';;')) return;
+      const separator = line.includes(';') ? ';' : ',';
+      const parts = line.split(separator).map((part) => part.trim().replace(/"/g, ''));
+      if (parts.length < 2) return;
+      const code = parts[0];
+      const name = parts[1];
+      if (!code || !name) return;
+      if (code.toLowerCase().includes('codigo vendedor') || name.toLowerCase().includes('nombre vendedor')) return;
+      map[normalizeSellerCode(code)] = name;
+      map[code.toLowerCase()] = name;
+    });
+    return map;
+  };
+
+  useEffect(() => {
+    const loadSellerEquivalences = async () => {
+      try {
+        const response = await fetch(`${SELLER_EQ_URL}?t=${Date.now()}`, { cache: 'no-store' });
+        if (!response.ok) return;
+        const text = await response.text();
+        const lookup = parseSellerEquivalences(text);
+        if (Object.keys(lookup).length > 0) {
+          setSellerLookup(lookup);
+        }
+      } catch {
+        // Si no existe equivalencia, se mantiene el codigo original.
+      }
+    };
+    loadSellerEquivalences();
+  }, []);
+
+  useEffect(() => {
+    if (Object.keys(sellerLookup).length === 0) return;
+    setSalesData((prev) => prev.map((row) => {
+      const sellerCode = row.vendedorCodigo || row.vendedor;
+      const sellerName = resolveSellerName(sellerCode, sellerLookup);
+      if (sellerName === row.vendedor && sellerCode === row.vendedorCodigo) return row;
+      return {
+        ...row,
+        vendedorCodigo: sellerCode,
+        vendedor: sellerName,
+      };
+    }));
+  }, [sellerLookup]);
+
   const parseCsvText = (text) => {
     const lines = text.split(/\r?\n/).filter((l) => l.trim() !== '');
     if (lines.length < 2) {
@@ -164,7 +229,8 @@ const App = () => {
         mes: MESES_NOMBRES[parseInt(periodoStr.substring(4, 6), 10) - 1] || '',
         numMes: parseInt(periodoStr.substring(4, 6), 10),
         cliente: values[26] || 'Sin Cliente',
-        vendedor: values[27] || 'Sin Vendedor',
+        vendedorCodigo: values[27] || '',
+        vendedor: resolveSellerName(values[27], sellerLookup),
         producto: values[8] || 'Sin Producto',
         neto: parseContable(values[32]),
         costo: parseContable(values[34]),

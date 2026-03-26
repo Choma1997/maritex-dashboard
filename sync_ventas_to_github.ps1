@@ -1,7 +1,8 @@
 param(
   [string]$SourceFolder = "C:\Users\Matias Chomali\OneDrive - Maritex SpA\Matias\Area Gerencia\AI\APP VENTAS",
   [string]$RepoFolder = "C:\Users\Matias Chomali\OneDrive - Maritex SpA\Matias\Area Gerencia\AI\APP VENTAS\dashboard-web",
-  [string]$TargetCsvRelativePath = "public\data\ventas.csv"
+  [string]$TargetCsvRelativePath = "public\data\ventas.csv",
+  [string]$TargetSellerMapRelativePath = "public\data\vendedores_equivalencia.csv"
 )
 
 $ErrorActionPreference = "Stop"
@@ -27,6 +28,7 @@ function Get-SalesFiles {
   $files = Get-ChildItem -Path $Folder -File -Recurse |
     Where-Object {
       $_.Extension -in @(".csv", ".xlsx", ".xls") -and
+      -not ($_.Name.ToLower().Contains("vendedor") -and $_.Name.ToLower().Contains("equival")) -and
       (
         -not $excludeNorm -or
         -not ([System.IO.Path]::GetFullPath($_.FullName).ToLower().StartsWith($excludeNorm))
@@ -134,20 +136,62 @@ function Push-IfChanged {
       return
     }
 
-    git add public/data/ventas.csv
+    git add public/data/ventas.csv public/data/vendedores_equivalencia.csv
     $postAddStatus = git status --porcelain
     if (-not $postAddStatus) {
-      Write-Host "[SYNC] No hay cambios en ventas.csv."
+      Write-Host "[SYNC] No hay cambios en archivos de datos."
       return
     }
 
-    git commit -m "Auto-update ventas data"
+    git pull --rebase origin main
+    if ($LASTEXITCODE -ne 0) {
+      throw "No se pudo sincronizar con origin/main antes de commit."
+    }
+
+    git -c user.name="Matias Chomali" -c user.email="matiaschomali@users.noreply.github.com" commit -m "Auto-update dashboard data"
+    if ($LASTEXITCODE -ne 0) {
+      throw "No se pudo crear el commit automatico."
+    }
+
     git push
+    if ($LASTEXITCODE -ne 0) {
+      throw "No se pudo hacer push de los cambios automaticos."
+    }
     Write-Host "[SYNC] Cambios subidos a GitHub correctamente."
   }
   finally {
     Pop-Location
   }
+}
+
+function Sync-SellerEquivalence {
+  param(
+    [string]$SourceRoot,
+    [string]$TargetSellerMapFullPath
+  )
+
+  $targetDir = Split-Path -Path $TargetSellerMapFullPath -Parent
+  if (!(Test-Path $targetDir)) {
+    New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+  }
+
+  $candidate = Get-ChildItem -Path $SourceRoot -File -Recurse |
+    Where-Object { $_.Extension -eq ".csv" -and $_.Name.ToLower().Contains("vendedor") -and $_.Name.ToLower().Contains("equival") } |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -First 1
+
+  if ($null -eq $candidate) {
+    Write-Host "[SYNC] No se encontro archivo de equivalencia de vendedores."
+    return
+  }
+
+  if ([System.IO.Path]::GetFullPath($candidate.FullName) -eq [System.IO.Path]::GetFullPath($TargetSellerMapFullPath)) {
+    Write-Host "[SYNC] La equivalencia de vendedores ya esta en destino."
+    return
+  }
+
+  Copy-Item -Path $candidate.FullName -Destination $TargetSellerMapFullPath -Force
+  Write-Host "[SYNC] Equivalencia de vendedores actualizada desde: $($candidate.FullName)"
 }
 
 try {
@@ -178,9 +222,11 @@ try {
   }
 
   $targetCsvFullPath = Join-Path $RepoFolder $TargetCsvRelativePath
+  $targetSellerMapFullPath = Join-Path $RepoFolder $TargetSellerMapRelativePath
   Write-Host "[SYNC] Archivo origen detectado: $($latest.FullName)"
 
   Update-TargetCsv -SourceFile $latest -TargetCsvFullPath $targetCsvFullPath
+  Sync-SellerEquivalence -SourceRoot $SourceFolder -TargetSellerMapFullPath $targetSellerMapFullPath
   Push-IfChanged -RepoPath $RepoFolder
 }
 catch {

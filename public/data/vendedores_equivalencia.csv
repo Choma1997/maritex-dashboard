@@ -1,0 +1,37 @@
+;;
+codigo vendedor;nombre vendedor;Centro de costos
+15;Otros;2-Sala de ventas CM
+14;Luis Flores (Regiones);2-Sala de ventas CM
+12;José Gonzalez;2-Sala de ventas CM
+11;Nayadeth Guerrero;2-Sala de ventas CM
+10;Ventas norte antiguo;2-Sala de ventas CM
+9;Ximena Crovetto;2-Sala de ventas CM
+8;Ventas web antiguo;2-Sala de ventas CM
+7;Lorena Opazo;2-Sala de ventas CM
+5;Graciela Santander;2-Sala de ventas CM
+4;Asistente venta;2-Sala de ventas CM
+1;Jefe ventas;2-Sala de ventas CM
+49;Vendedor LP;3-Local Patronato
+47;Maria Bernard;3-Local Patronato
+46;Asistente LP;3-Local Patronato
+45;Mariely Rosales;3-Local Patronato
+44;Carolina Crockett;3-Local Patronato
+43;Adelso Abreu;3-Local Patronato
+42;Jefe local;3-Local Patronato
+13;Personal;2-Sala de ventas CM
+48;Euro Quiñonez;1-Grandes Cuentas
+3;Daniel Alvarado;1-Grandes Cuentas
+2;Maritza;1-Grandes Cuentas
+33;MKP Falabella;7-Ecommerce
+32;B2B;7-Ecommerce
+31;Nolk.cl;7-Ecommerce
+30;B2C;7-Ecommerce
+34;Mkp Mercado libre;7-Ecommerce
+16;Matias Chomali;6-Corporativo
+6;C. Lopez;6-Corporativo
+53;Otros;4-Local Concepción
+52;Carlos;4-Local Concepción
+51;Nelson San Martin;4-Local Concepción
+50;Gino Matus;4-Local Concepción
+54;Daniela (asistente);4-Local Concepción
+60;Jose luis Rollano;5-Antofagasta
