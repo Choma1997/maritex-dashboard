@@ -6,12 +6,41 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-function Get-LatestSalesFile {
+function Test-FileReadable {
+  param([string]$Path)
+  try {
+    $stream = [System.IO.File]::Open($Path, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+    $stream.Close()
+    return $true
+  }
+  catch {
+    return $false
+  }
+}
+
+function Get-SalesFiles {
   param([string]$Folder)
   $files = Get-ChildItem -Path $Folder -File -Recurse |
     Where-Object { $_.Extension -in @(".csv", ".xlsx", ".xls") } |
     Sort-Object LastWriteTime -Descending
-  return $files | Select-Object -First 1
+  return $files
+}
+
+function Get-BestAvailableSalesFile {
+  param([string]$Folder)
+  $files = Get-SalesFiles -Folder $Folder
+  if (-not $files) {
+    return $null
+  }
+
+  # Prioriza CSV si es reciente y evita archivos bloqueados.
+  $sorted = $files | Sort-Object @{ Expression = { if ($_.Extension -eq ".csv") { 0 } else { 1 } } }, @{ Expression = { -$_.LastWriteTime.Ticks } }
+  foreach ($f in $sorted) {
+    if (Test-FileReadable -Path $f.FullName) {
+      return $f
+    }
+  }
+  return $null
 }
 
 function Convert-ExcelToCsv {
@@ -61,7 +90,16 @@ function Update-TargetCsv {
   }
 
   if ($SourceFile.Extension -in @(".xlsx", ".xls")) {
-    Convert-ExcelToCsv -ExcelPath $SourceFile.FullName -OutCsvPath $TargetCsvFullPath
+    $tempExcelPath = Join-Path $env:TEMP ("ventas_source_" + [guid]::NewGuid().ToString() + $SourceFile.Extension)
+    Copy-Item -Path $SourceFile.FullName -Destination $tempExcelPath -Force
+    try {
+      Convert-ExcelToCsv -ExcelPath $tempExcelPath -OutCsvPath $TargetCsvFullPath
+    }
+    finally {
+      if (Test-Path $tempExcelPath) {
+        Remove-Item $tempExcelPath -Force
+      }
+    }
     return
   }
 
@@ -103,9 +141,22 @@ try {
     throw "No existe carpeta del repositorio: $RepoFolder"
   }
 
-  $latest = Get-LatestSalesFile -Folder $SourceFolder
-  if ($null -eq $latest) {
+  $filesFound = Get-SalesFiles -Folder $SourceFolder
+  if (-not $filesFound) {
     throw "No se encontraron archivos CSV/XLSX/XLS en: $SourceFolder"
+  }
+
+  $latest = $null
+  for ($i = 1; $i -le 6; $i++) {
+    $latest = Get-BestAvailableSalesFile -Folder $SourceFolder
+    if ($null -ne $latest) {
+      break
+    }
+    Write-Host "[SYNC] Esperando archivo disponible... intento $i/6"
+    Start-Sleep -Seconds 10
+  }
+  if ($null -eq $latest) {
+    throw "No hay archivos disponibles para lectura (posiblemente bloqueados por Excel/OneDrive)."
   }
 
   $targetCsvFullPath = Join-Path $RepoFolder $TargetCsvRelativePath
