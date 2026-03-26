@@ -19,16 +19,29 @@ function Test-FileReadable {
 }
 
 function Get-SalesFiles {
-  param([string]$Folder)
+  param(
+    [string]$Folder,
+    [string]$ExcludePrefix
+  )
+  $excludeNorm = if ($ExcludePrefix) { [System.IO.Path]::GetFullPath($ExcludePrefix).ToLower() } else { "" }
   $files = Get-ChildItem -Path $Folder -File -Recurse |
-    Where-Object { $_.Extension -in @(".csv", ".xlsx", ".xls") } |
+    Where-Object {
+      $_.Extension -in @(".csv", ".xlsx", ".xls") -and
+      (
+        -not $excludeNorm -or
+        -not ([System.IO.Path]::GetFullPath($_.FullName).ToLower().StartsWith($excludeNorm))
+      )
+    } |
     Sort-Object LastWriteTime -Descending
   return $files
 }
 
 function Get-BestAvailableSalesFile {
-  param([string]$Folder)
-  $files = Get-SalesFiles -Folder $Folder
+  param(
+    [string]$Folder,
+    [string]$ExcludePrefix
+  )
+  $files = Get-SalesFiles -Folder $Folder -ExcludePrefix $ExcludePrefix
   if (-not $files) {
     return $null
   }
@@ -145,14 +158,15 @@ try {
     throw "No existe carpeta del repositorio: $RepoFolder"
   }
 
-  $filesFound = Get-SalesFiles -Folder $SourceFolder
+  $excludePrefix = Join-Path $RepoFolder "public\data"
+  $filesFound = Get-SalesFiles -Folder $SourceFolder -ExcludePrefix $excludePrefix
   if (-not $filesFound) {
     throw "No se encontraron archivos CSV/XLSX/XLS en: $SourceFolder"
   }
 
   $latest = $null
   for ($i = 1; $i -le 6; $i++) {
-    $latest = Get-BestAvailableSalesFile -Folder $SourceFolder
+    $latest = Get-BestAvailableSalesFile -Folder $SourceFolder -ExcludePrefix $excludePrefix
     if ($null -ne $latest) {
       break
     }
